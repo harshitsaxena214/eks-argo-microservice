@@ -1,400 +1,485 @@
-# Retail Store Sample App - GitOps with Amazon EKS Auto Mode
- 
+# Retail Store Sample App — GitOps with Amazon EKS Auto Mode
+
 ![Banner](./docs/images/banner.png)
- 
-<div align="center">
-  <div align="center">
 
-[![Stars](https://img.shields.io/github/stars/LondheShubham153/retail-store-sample-app)](Stars)
-![GitHub License](https://img.shields.io/github/license/LondheShubham153/retail-store-sample-app?color=green)
-![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%LondheShubham153%2Fretail-store-sample-app%2Frefs%2Fheads%2Fmain%2F.release-please-manifest.json&query=%24%5B%22.%22%5D&label=release)
+A microservices retail application deployed on **Amazon EKS** using **GitOps principles**. This project demonstrates end-to-end cloud-native delivery: infrastructure provisioned with Terraform, container images stored in Amazon ECR, deployments managed by Argo CD, and CI/CD pipelines automated with GitHub Actions.
 
-
-  </div>
-
-  <strong>
-  <h2>AWS Containers Retail Sample</h2>
-  </strong>
-</div>
-
-This is a sample application designed to illustrate various concepts related to containers on AWS. It presents a sample retail store application including a product catalog, shopping cart and checkout, deployed using modern DevOps practices including GitOps and Infrastructure as Code.
+---
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Branch Strategy](#branch-strategy)
-- [Getting Started](#getting-started)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Infrastructure](#infrastructure)
 - [GitOps Workflow](#gitops-workflow)
-- [EKS Auto Mode](#eks-auto-mode)
-- [Infrastructure Components](#infrastructure-components)
 - [CI/CD Pipeline](#cicd-pipeline)
-- [Monitoring and Observability](#monitoring-and-observability)
-- [Cleanup](https://github.com/LondheShubham153/retail-store-sample-app/blob/main/README.md#step-12-cleanup)
+- [Deployment Guide](#deployment-guide)
+- [Argo CD](#argo-cd)
+- [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
 
-## Overview
+---
 
-The Retail Store Sample App demonstrates a modern microservices architecture deployed on AWS EKS using GitOps principles. The application consists of multiple services that work together to provide a complete retail store experience:
+## Architecture
 
+The application is deliberately composed of multiple independent services, each with its own technology stack and infrastructure dependencies.
 
-- **UI Service**: Java-based frontend
-- **Catalog Service**: Go-based product catalog API
-- **Cart Service**: Java-based shopping cart API
-- **Orders Service**: Java-based order management API
-- **Checkout Service**: Node.js-based checkout orchestration API
+![Application Architecture](./docs/images/architecture.png)
 
+| Service | Language | Description |
+|---|---|---|
+| [UI](./src/ui/) | Java | Store frontend — renders the shopping interface |
+| [Catalog](./src/catalog/) | Go | Product catalog API |
+| [Cart](./src/cart/) | Java | Shopping cart API |
+| [Orders](./src/orders/) | Java | Order management API |
+| [Checkout](./src/checkout/) | Node.js | Checkout orchestration API |
 
-## Application Architecture
+Each service is packaged as a container image, versioned in Amazon ECR, and deployed independently via its own Helm chart and Argo CD application.
 
-The application has been deliberately over-engineered to generate multiple de-coupled components. These components generally have different infrastructure dependencies, and may support multiple "backends" (example: Carts service supports MongoDB or DynamoDB).
+![EKS Deployment](docs/images/EKS.gif)
 
-![Architecture](https://github.com/aws-containers/retail-store-sample-app/raw/main/docs/images/architecture.png)
+---
 
-| Component                  | Language | Container Image                                                             | Helm Chart                                                                        | Description                             |
-| -------------------------- | -------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------- |
-| [UI](./src/ui/)            | Java     | [Link](https://gallery.ecr.aws/aws-containers/retail-store-sample-ui)       | [Link](src/ui/chart/values.yaml)    | Store user interface                    |
-| [Catalog](./src/catalog/)  | Go       | [Link](https://gallery.ecr.aws/aws-containers/retail-store-sample-catalog)  | [Link](src/catalog/chart/values.yaml)  | Product catalog API                     |
-| [Cart](./src/cart/)        | Java     | [Link](https://gallery.ecr.aws/aws-containers/retail-store-sample-cart)     | [Link](src/cart/chart/values.yaml)     | User shopping carts API                 |
-| [Orders](./src/orders)     | Java     | [Link](https://gallery.ecr.aws/aws-containers/retail-store-sample-orders)   | [Link](src/orders/chart/values.yaml)   | User orders API                         |
-| [Checkout](./src/checkout) | Node     | [Link](https://gallery.ecr.aws/aws-containers/retail-store-sample-checkout) | [Link](src/checkout/chart/values.yaml) | API to orchestrate the checkout process |
+## Technology Stack
 
+| Category | Technology |
+|---|---|
+| Cloud | AWS |
+| Container Orchestration | Amazon EKS, EKS Auto Mode, Kubernetes 1.33 |
+| Infrastructure as Code | Terraform |
+| Container Registry | Amazon ECR |
+| GitOps | Argo CD |
+| CI/CD | GitHub Actions |
+| Package Management | Helm |
+| Ingress | NGINX Ingress Controller |
+| Certificate Management | Cert-Manager |
+| Networking | VPC, NAT Gateway, NLB |
+| Identity & Access | AWS IAM |
 
-## Infrastructure Architecture
+---
 
-The Infrastructure Architecture follows cloud-native best practices:
+## Project Structure
 
-- **Microservices**: Each component is developed and deployed independently
-- **Containerization**: All services run as containers on Kubernetes
-- **GitOps**: Infrastructure and application deployment managed through Git
-- **Infrastructure as Code**: All AWS resources defined using Terraform
-- **CI/CD**: Automated build and deployment pipelines with GitHub Actions
+```text
+eks-argo-microservice/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions CI/CD pipeline
+├── argocd/
+│   ├── applications/           # Argo CD Application manifests (one per service)
+│   └── projects/               # Argo CD Project manifests
+├── src/
+│   ├── ui/                     # Java frontend service + Helm chart
+│   ├── catalog/                # Go catalog service + Helm chart
+│   ├── cart/                   # Java cart service + Helm chart
+│   ├── orders/                 # Java orders service + Helm chart
+│   └── checkout/               # Node.js checkout service + Helm chart
+├── terraform/                  # All AWS infrastructure definitions
+│   ├── main.tf                 # VPC and EKS cluster
+│   ├── addons.tf               # NGINX Ingress, Cert-Manager
+│   ├── argocd.tf               # Argo CD Helm installation + manifest apply
+│   ├── variables.tf
+│   ├── locals.tf
+│   ├── outputs.tf
+│   └── versions.tf
+├── docs/
+│   └── images/                 # Screenshots and diagrams
+├── BRANCHING_STRATEGY.md       # Detailed branching and CI/CD strategy
+└── README.md
+```
 
-![EKS](docs/images/EKS.gif)
+---
 
+## Infrastructure
 
+All AWS resources are defined in `terraform/` and provisioned in a single `terraform apply`. There are no manual steps for infrastructure creation.
 
-## Quick Start
+### Resources Created
 
-**Want to deploy immediately?** Follow these steps for a basic deployment:
+| Resource | Details |
+|---|---|
+| **VPC** | CIDR `10.0.0.0/16`, public + private subnets across multiple AZs |
+| **NAT Gateway** | Single NAT gateway (configurable) routing private subnet egress |
+| **Internet Gateway** | Public internet access for load balancer |
+| **Amazon EKS** | Kubernetes 1.33, EKS Auto Mode enabled (`general-purpose` node pool) |
+| **EKS Encryption** | KMS key for cluster secret encryption |
+| **NGINX Ingress** | Deployed via Helm; backed by an internet-facing AWS NLB |
+| **Cert-Manager** | Deployed via Helm for SSL certificate management |
+| **Argo CD** | Deployed via Helm into the `argocd` namespace |
+| **IAM** | Cluster creator admin permissions, OIDC provider for service accounts |
 
-1. **Install Prerequisites**: AWS CLI, Terraform, kubectl, Docker, Helm
-2. **Configure AWS**: `aws configure` with appropriate credentials
-3. **Clone Repository**: `git clone https://github.com/LondheShubham153/retail-store-sample-app.git`
-4. **Deploy Infrastructure**: Run Terraform in two phases (see [Getting Started](#getting-started))
-5. **Access Application**: Get load balancer URL and browse the retail store
+### EKS Auto Mode
 
-**Need advanced GitOps workflow?** See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for automated CI/CD setup.
+EKS Auto Mode is enabled with a `general-purpose` node pool. AWS manages node provisioning, scaling, and OS patching automatically — no managed node groups or self-managed nodes are required.
 
-## Branch Strategy
+---
 
-This repository uses a **dual-branch approach** for different deployment scenarios:
+## GitOps Workflow
 
-### 🌐 **Public Application (Main Branch)**
-- **Purpose**: Simple deployment with public images
-- **Images**: Public ECR (stable versions like v1.2.2)
-- **Deployment**: Manual control with umbrella chart
-- **Updates**: Manual only
-- **Best for**: Demos, learning, quick testing, simple deployments
+```
+Developer pushes code to src/
+        │
+        ▼
+GitHub (main branch)
+        │
+        ▼
+GitHub Actions triggers on push to src/**
+        │
+        ▼
+Docker image built per changed service
+        │
+        ▼
+Image pushed to Amazon ECR
+        │
+        ▼
+GitHub Actions updates Helm values.yaml
+(image tag → short commit SHA)
+        │
+        ▼
+Change committed back to repository
+        │
+        ▼
+Argo CD detects Git state has changed
+        │
+        ▼
+Argo CD syncs Helm chart to Amazon EKS
+        │
+        ▼
+Kubernetes Pods updated with new image
+```
 
-### 🏭 **Production (GitOps Branch)**
-- **Purpose**: Full production workflow with CI/CD pipeline
-- **Images**: Private ECR (auto-updated with commit hashes)
-- **Deployment**: Automated via GitHub Actions
-- **Updates**: Automatic on code changes
-- **Best for**: Production environments, automated workflows, enterprise deployments
+Argo CD continuously reconciles the desired state in Git against the live state in the cluster. If a resource drifts from what is declared in Git (e.g. someone manually edits a Deployment), Argo CD automatically corrects it (`selfHeal: true`). Stale resources are pruned automatically (`prune: true`).
 
-> **📚 For detailed branching strategy, CI/CD setup, and advanced workflows, see [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)**
+---
 
-## Getting Started
+## CI/CD Pipeline
+
+The pipeline is defined in [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) and triggers on any push to the `main` branch that modifies files inside `src/`.
+
+### Pipeline Stages
+
+**1. Detect Changed Services**
+
+The pipeline inspects `git diff` between the last two commits and identifies which services changed (`ui`, `catalog`, `cart`, `checkout`, `orders`). Only changed services are built, avoiding unnecessary work. A manual `workflow_dispatch` trigger builds all services.
+
+**2. Build and Push to ECR**
+
+For each changed service:
+- Authenticates to AWS using repository secrets
+- Logs in to Amazon ECR
+- Creates the ECR repository if it does not exist (scan on push enabled, AES-256 encryption)
+- Builds the Docker image from `src/<service>/`
+- Tags the image with both the short commit SHA (7 characters) and `latest`
+- Pushes both tags to ECR
+
+**3. Update Helm Values**
+
+The pipeline uses `awk` to update only the main service image in `src/<service>/chart/values.yaml`:
+- Sets `image.repository` to the ECR repo URL
+- Sets `image.tag` to the short commit SHA
+
+Infrastructure component images (MySQL, Redis, PostgreSQL, RabbitMQ) within the same chart are left untouched.
+
+**4. Commit and Push**
+
+The updated `values.yaml` is committed to the repository by `gitops@github.com` with a descriptive commit message. This is what triggers Argo CD to pick up the new image tag.
+
+### Required GitHub Secrets
+
+Navigate to **Repository → Settings → Secrets and variables → Actions** and add:
+
+| Secret | Value |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+| `AWS_REGION` | AWS region (e.g. `us-west-2`) |
+| `AWS_ACCOUNT_ID` | 12-digit AWS account ID |
+
+The IAM user requires permissions to authenticate to ECR and push images.
+
+---
+
+## Deployment Guide
 
 ### Prerequisites
 
-1. **Install Prerequisites**: AWS CLI, Terraform, kubectl, Docker, Helm
-2. **Configure AWS**: `aws configure` with appropriate credentials
-3. **Clone Repository**: `git clone https://github.com/LondheShubham153/retail-store-sample-app.git`
-4. **Deploy Infrastructure**: Run Terraform in two phases (see [Getting Started](#getting-started))
-5. **Access Application**: Get load balancer URL and browse the retail store
+Ensure the following tools are installed before starting:
 
-### **Required Tools**
-
-| Tool          | Version | Installation                                                                         |
-| ------------- | ------- | ------------------------------------------------------------------------------------ |
-| **AWS CLI**   | v2+     | [Install Guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
-| **Terraform** | 1.0+    | [Install Guide](https://developer.hashicorp.com/terraform/install)                   |
-| **kubectl**   | 1.33+   | [Install Guide](https://kubernetes.io/docs/tasks/tools/)                             |
-| **Docker**    | 20.0+   | [Install Guide](https://docs.docker.com/get-docker/)                                 |
-| **Helm**      | 3.0+    | [Install Guide](https://helm.sh/docs/intro/install/)                                 |
-| **Git**       | 2.0+    | [Install Guide](https://git-scm.com/downloads) 
-
-Follow these steps to **install Prerequisites:**
-
-
-### **Quick Installation Scripts**
+| Tool | Version | Install |
+|---|---|---|
+| AWS CLI | v2+ | [docs.aws.amazon.com](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) |
+| Terraform | 1.0+ | [developer.hashicorp.com](https://developer.hashicorp.com/terraform/install) |
+| kubectl | 1.33+ | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
+| Docker | 20.0+ | [docs.docker.com](https://docs.docker.com/get-docker/) |
+| Helm | 3.0+ | [helm.sh](https://helm.sh/docs/intro/install/) |
+| Git | 2.0+ | [git-scm.com](https://git-scm.com/downloads) |
 
 <details>
-<summary><strong>🔧 One-Click Installation</strong></summary>
+<summary><strong>One-line installation script (Ubuntu/Debian)</strong></summary>
 
 ```bash
 #!/bin/bash
-# Install all prerequisites
 
 # AWS CLI
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
+unzip awscliv2.zip && sudo ./aws/install
 
 # Terraform
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
 sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install terraform
+sudo apt-get update && sudo apt-get install -y terraform
 
 # kubectl
 curl -LO "https://dl.k8s.io/release/v1.33.3/bin/linux/amd64/kubectl"
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/
+chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
 # Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
 
 # Helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-# Verify installations
-aws --version
-terraform --version
-kubectl version --client
-docker --version
-helm version
 ```
 
 </details>
 
+---
 
-## Follow these steps to deploy the application:
+### Step 1 — Configure AWS
 
-### Step 1. Configure AWS with **`Root User`** Credentials:
-
-  Ensure your AWS CLI is configured with the **Root user credentials:**
-
-```sh
+```bash
 aws configure
 ```
 
-### Step 2. Clone the Repository:
+Provide your AWS Access Key ID, Secret Access Key, default region, and output format. The deploying identity requires permissions to create VPCs, EKS clusters, IAM roles, and Helm releases.
 
-```sh
-git clone https://github.com/LondheShubham153/retail-store-sample-app.git
+---
+
+### Step 2 — Clone the Repository
+
+```bash
+git clone https://github.com/harshitsaxena214/eks-argo-microservice.git
+cd eks-argo-microservice
 ```
 
-> [!IMPORTANT]
-> ### Step 3: Choose Your Deployment Strategy
->
-> **For Public Application (Main Branch):**
-> - Uses stable public ECR images (v1.2.2)
-> - Manual deployment control
-> - No GitHub Actions required
-> - Skip to Step 4 - infrastructure is ready
->
-> **For Production (GitOps Branch):**
-> - Uses private ECR with automated CI/CD
-> - Requires GitHub Actions setup
-> - See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for complete setup
+---
 
+### Step 3 — Deploy Infrastructure
 
-### Step 4. Deploy Infrastructure with Terraform:
-
-```sh
-cd retail-store-sample-app/terraform/
+```bash
+cd terraform/
 terraform init
 terraform apply --auto-approve
 ```
 
-<img width="1205" height="292" alt="image" src="https://github.com/user-attachments/assets/6f1e407e-4a4e-4a4c-9bdf-0c9b89681368" />
-
-This creates the core infrastructure, including:
+This single apply creates and configures:
 - VPC with public and private subnets
-- Amazon EKS cluster with Auto Mode enabled
-- Security groups and IAM roles
+- Amazon EKS cluster (Auto Mode, Kubernetes 1.33)
+- IAM roles and KMS encryption key
+- NGINX Ingress Controller (via Helm)
+- Cert-Manager (via Helm)
+- Argo CD (via Helm) with all Argo CD Application and Project manifests
 
-And deploys:
-- ArgoCD for Setup GitOps
-- NGINX Ingress Controller
-- Cert Manager for SSL certificates
+> [!NOTE]
+> Terraform waits 30 seconds after the EKS cluster is ready before installing Argo CD, giving the cluster API time to stabilize.
 
+---
 
-### Step 5: Update kubeconfig to Access the Amazon EKS Cluster:
-```
+### Step 4 — Configure kubectl
+
+```bash
 aws eks update-kubeconfig --name retail-store --region <region>
 ```
 
-> Application is live with Public image:
+Replace `<region>` with the AWS region you deployed to (default: `us-west-2`).
 
-- Get your ingress EXTERNAL-IP and paste it in the browser to access retail-store application.
-    ```sh
-    kubectl get svc -n ingress-nginx
-    ```
-
-> [!NOTE]
-> Let's move forward with GitOps principle utilising Amazon private registry to create private registry and store images.
-
-### Step 6: GitHub Actions (Production Branch Only)
-
-> **Note**: This step is only required if you're using the **Production branch** for automated deployments. Skip this step if using the **Public Application branch** for simple deployment.
-
-For GitHub Actions, first configure secrets so the pipelines can be automatically triggered:
-
-**Create an IAM User, policies, and generate credentials**
-
-**Go to your GitHub repo → Settings → Secrets and variables → Actions → New repository secret.**
-
-
-| Secret Name           | Value                              |
-|-----------------------|------------------------------------|
-| `AWS_ACCESS_KEY_ID`   | `Your AWS Access Key ID`           |
-| `AWS_SECRET_ACCESS_KEY` | `Your AWS Secret Access Key`     |
-| `AWS_REGION`          | `region-name`                       |
-| `AWS_ACCOUNT_ID`        | `your-account-id` |
-
-
-
-> [!IMPORTANT]
-> Once the entire cluster is created, any changes pushed to the repository will automatically trigger GitHub Actions.
-
-GitHub Actions will automatically build and push the updated Docker images to Amazon ECR.
-
-
-
-<img width="2868" height="1130" alt="image" src="https://github.com/user-attachments/assets/f29c3416-d630-4463-81d2-aaa8af9a02da" />
-
-
-### Verify Deployment
-
-Check if the nodes are running:
+Verify connectivity:
 
 ```bash
 kubectl get nodes
 ```
 
-### Step 7: Access the Application:
+---
 
-The application is exposed through the NGINX Ingress Controller. Get the load balancer URL:
+### Step 5 — Access the Application (Public Image Deployment)
+
+With infrastructure deployed, the application runs using public ECR images. Get the ingress load balancer address:
 
 ```bash
 kubectl get svc -n ingress-nginx
 ```
 
-Use the EXTERNAL-IP of the ingress-nginx-controller service to access the application.
-
-<img width="2912" height="1756" alt="image" src="https://github.com/user-attachments/assets/095077d6-d3cb-48f6-b021-e977db5fb242" />
-
-### Step 8: Argo CD Automated Deployment:
-
-**Verify ArgoCD installation**
-
-```
-kubectl get pods -n argocd
-```
-
-
-### Step 9: Port-forward to Argo CD UI and login:
-
-**Get ArgoCD admin password**
-```
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
-```
-
-**Port-forward to Argo CD UI**
-```
-kubectl port-forward svc/argocd-server -n argocd 8080:443 &
-```
-
-Open your browser and navigate to:
-https://localhost:8080
-
-Username: admin 
-
-Password: <output of previous command>
-
-### Step 10: Access ArgoCD UI
-
-Once ArgoCD is deployed, you can access the web interface:
-
-![ArgoCD UI Dashboard](./docs/images/argocd-ui.png)
-
-The ArgoCD UI provides:
-- **Application Status**: Real-time sync status of all services
-- **Resource View**: Detailed view of Kubernetes resources
-- **Sync Operations**: Manual sync and rollback capabilities
-- **Health Monitoring**: Application and resource health status
-
-### Step 11: Monitor Application Deployment
-
-```bash
-kubectl get pods -n retail-store
-kubectl get ingress -n retail-store
-```
-
-### Step 12: Cleanup
-To delete all resources created by Terraform:
-```
-terraform destroy --auto-approve
-```
-
-<img width="1139" height="439" alt="image" src="https://github.com/user-attachments/assets/5258761a-01c4-49d0-b6f3-997fc10a9f35" />
-
-> [!NOTE]
-> ECR Repositories you need to Delete it from AWS Console Manually.
-
-
-
-## Troubleshooting
-
-### Common Issues
-
-#### **Image Pull Errors**
-```
-Error: Failed to pull image "123456789012.dkr.ecr.us-west-2.amazonaws.com/retail-store-ui:abc1234"
-```
-**Solutions**:
-1. Ensure you're using the correct branch for your deployment strategy
-2. For Production branch: Check GitHub Actions completed successfully
-3. For Public Application branch: Verify you're using public ECR images
-4. Check AWS credentials and ECR permissions
-
-#### **GitHub Actions Not Triggering**
-**Solutions**:
-1. Ensure changes are in `src/` directory
-2. Verify you're on the `production` branch (gitops)
-3. Check GitHub Actions is enabled in repository settings
-4. Review [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for detailed setup
-
-### Getting Help
-
-- **Basic deployment issues**: Check this README
-- **Advanced GitOps issues**: See [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)
-- **Infrastructure issues**: Review Terraform logs
-- **Application issues**: Check ArgoCD UI and kubectl logs
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/LondheShubham153/retail-store-sample-app/issues)
-- **Discord**: [TrainWithShubhamCommunity](https://discord.gg/kGEr9mR5gT)
+Copy the `EXTERNAL-IP` of the `ingress-nginx-controller` service and open it in a browser to access the retail store.
 
 ---
 
-<div align="center">
+### Step 6 — Configure GitHub Actions (GitOps Deployment)
 
-**⭐ Star this repository if you found it helpful!**
+> [!IMPORTANT]
+> This step is only required for the automated CI/CD workflow that builds private images. If you are using the public image deployment from Step 5, you can skip this step.
 
-**🔄 For advanced GitOps workflows, see [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md)**
+Add the four secrets listed in the [CI/CD Pipeline](#cicd-pipeline) section to your GitHub repository. Once configured, any push to `src/` on the `main` branch will automatically:
 
-</div>
+1. Build updated Docker images
+2. Push them to Amazon ECR
+3. Update the Helm `values.yaml` with the new image tag
+4. Trigger Argo CD to sync the cluster
 
+For a detailed breakdown of the branching strategy and CI/CD configuration, see [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md).
+
+---
+
+## Argo CD
+
+Argo CD is installed into the `argocd` namespace by Terraform and configured with one Application manifest per microservice (see [`argocd/applications/`](./argocd/applications/)). Each Application points to the corresponding Helm chart path in this repository.
+
+**Why Argo CD?** It provides a continuous reconciliation loop between the Git repository (desired state) and the live Kubernetes cluster (actual state). If a deployment drifts — through a manual change, node replacement, or any other cause — Argo CD restores it to match Git automatically.
+
+### Access the Argo CD Dashboard
+
+**Get the admin password:**
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d
+```
+
+**Port-forward to the Argo CD server:**
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+Open [https://localhost:8080](https://localhost:8080) in your browser.
+
+- **Username:** `admin`
+- **Password:** output of the command above
+
+### Argo CD Dashboard
+
+![Argo CD UI](./docs/images/argocd-ui.png)
+
+The dashboard shows real-time sync status, resource health, and allows manual sync or rollback for each application.
+
+### Check Application Sync Status
+
+```bash
+# List all Argo CD applications and their sync/health status
+kubectl get applications -n argocd
+
+# Describe a specific application
+kubectl describe application retail-store-ui -n argocd
+
+# Check Argo CD pods are running
+kubectl get pods -n argocd
+```
+
+---
+
+## Verification
+
+Run these commands after deployment to confirm all components are healthy:
+
+```bash
+# Verify cluster nodes are Ready
+kubectl get nodes
+
+# Check all retail-store pods are Running
+kubectl get pods -n retail-store
+
+# Check services and cluster IPs
+kubectl get services -n retail-store
+
+# Check ingress resource and address
+kubectl get ingress -n retail-store
+
+# Get the ingress controller external load balancer address
+kubectl get svc -n ingress-nginx
+
+# Check Argo CD application sync status
+kubectl get applications -n argocd
+```
+
+---
+
+## Troubleshooting
+
+### Image Pull Errors
+
+```
+Failed to pull image "123456789012.dkr.ecr.us-west-2.amazonaws.com/retail-store-ui:abc1234"
+```
+
+- Verify the GitHub Actions pipeline completed successfully and the image exists in ECR
+- Confirm that `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ACCOUNT_ID` secrets are set correctly in the repository
+- Check IAM permissions: the deploying user needs `ecr:GetAuthorizationToken`, `ecr:BatchCheckLayerAvailability`, `ecr:PutImage`, and related permissions
+
+### GitHub Actions Not Triggering
+
+- Confirm the push includes changes inside `src/` — the workflow path filter is `src/**`
+- Confirm GitHub Actions is enabled: **Repository → Settings → Actions → General**
+- Review [BRANCHING_STRATEGY.md](./BRANCHING_STRATEGY.md) for full CI/CD setup instructions
+
+### ECR / IAM Issues
+
+- Run `aws sts get-caller-identity` to verify the AWS CLI is using the correct identity
+- Confirm the IAM user has `ecr:CreateRepository` permission if repositories do not exist yet
+- Check that `AWS_REGION` matches the region where EKS and ECR are deployed
+
+### Kubernetes Issues
+
+```bash
+# Check pod logs for a specific service
+kubectl logs -n retail-store -l app=ui --tail=50
+
+# Describe a pod to see events and error messages
+kubectl describe pod -n retail-store <pod-name>
+
+# Check resource limits causing OOMKilled
+kubectl top pods -n retail-store
+```
+
+### Argo CD Sync Issues
+
+```bash
+# Check Argo CD application status
+kubectl get applications -n argocd
+
+# Check Argo CD controller logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail=100
+
+# Force a manual sync via the dashboard or CLI
+# argocd app sync retail-store-ui
+```
+
+### Ingress / Load Balancer Issues
+
+- Confirm the NGINX Ingress Controller pod is running: `kubectl get pods -n ingress-nginx`
+- The NLB may take 2–5 minutes to provision after `terraform apply`
+- Verify the ingress resource has an address assigned: `kubectl get ingress -n retail-store`
+- Check NLB health checks: the controller exposes `/healthz` on port `10254`
+
+---
+
+## Cleanup
+
+To remove all resources created by Terraform:
+
+```bash
+cd terraform/
+terraform destroy --auto-approve
+```
+
+This removes the EKS cluster, VPC, NAT Gateway, IAM roles, and all Helm-managed components (NGINX, Cert-Manager, Argo CD).
+
+> [!IMPORTANT]
+> **Manual cleanup required:** Amazon ECR repositories created by GitHub Actions are not managed by Terraform and must be deleted manually from the AWS Console or via the AWS CLI:
+>
+> ```bash
+> aws ecr delete-repository --repository-name retail-store-ui --force --region <region>
+> aws ecr delete-repository --repository-name retail-store-catalog --force --region <region>
+> aws ecr delete-repository --repository-name retail-store-cart --force --region <region>
+> aws ecr delete-repository --repository-name retail-store-orders --force --region <region>
+> aws ecr delete-repository --repository-name retail-store-checkout --force --region <region>
+> ```
